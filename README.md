@@ -1,201 +1,48 @@
 # PDF Generator Microservice (Mini-LPS)
 
-Este projeto implementa um serviço reutilizável, escalável e resiliente para geração de arquivos PDF a partir de templates HTML dinâmicos.
+Microserviço escolhido para o Trabalho 2 de Reuso de Software (UFC Quixadá). Implementa geração de PDFs a partir de templates Handlebars, com resiliência e controle de concorrência, visando reuso em diferentes domínios.
 
-Foi desenvolvido como parte da disciplina de **Reuso de Software** (UFC Quixadá), aplicando conceitos de **Linha de Produto de Software (Mini-LPS)**, padrões de resiliência e controle de concorrência distribuída.
+## Objetivo do trabalho
 
-## Funcionalidades
+- Entregar um serviço reutilizável (SOA/Microserviço) com API documentada (Swagger) e variabilidade via templates/partials.
+- Demonstrar resiliência (retry na renderização, lock distribuído com Redis para idempotência e concorrência).
+- Evidenciar reuso/variabilidade: múltiplos templates (`relatorio`, `certificado`, `contrato`, `builder`) e componentes (`texto`, `tabela`, `lista`, `info_grid`, `grafico`, `qrcode`, `assinaturas`).
+- Detalhamento completo (payloads, propriedades, exemplos) está em `DOCUMENTATION.md`.
 
-### 1. Reutilização & Desacoplamento
+## Visão técnica
 
-- **API Agnóstica:** O serviço não conhece a regra de negócio do cliente. Ele recebe dados brutos (JSON) e devolve o documento gerado, podendo ser integrado a E-commerce, Sistemas Acadêmicos, ERPs, etc.
+- **Stack:** Node.js + Express, Handlebars para templates, Puppeteer para renderização PDF, Redis para lock, Winston para logging, Swagger UI em `/api-docs`.
+- **Padrões de resiliência:** retry configurável (`MAX_RETRIES`) na geração de PDF; Puppeteer headless com `--no-sandbox`; chave `lock:<hash>` no Redis para impedir processamento duplicado.
+- **Idempotência e concorrência:** hash determinístico do payload (`templateName`, `data` e `fileName` opcional), lock com TTL e liberação ao final da requisição.
+- **Variabilidade:** partials componentes reutilizáveis e templates específicos (certificado/relatório/contrato) + `builder` para montar seções livres.
 
-### 2. Variabilidade (Abordagem Mini-LPS)
+## O que o serviço faz
 
-- **Múltiplos Produtos:** Suporte nativo a diferentes tipos de documentos (`relatorio`, `certificado`) através de templates Handlebars.
+- Recebe JSON com `templateName`, `data` e opcional `fileName`, compila o Handlebars e retorna o PDF binário.
+- Suporta gráficos (Chart.js) e QR Codes (node-qrcode) gerados no controller e injetados como base64 nos templates.
+- Logging estruturado com Winston; inspeção interativa da API em `/api-docs`.
 
-- **Componentização:** Uso de *Partials* para reutilizar cabeçalhos e rodapés comuns em todos os documentos.
+## Como rodar rapidamente
 
-### 3. Resiliência e Robustez
+1. `npm install`
+2. Suba um Redis (ex.: `docker run -d --name pdf-redis -p 6379:6379 redis:latest`).
+3. Crie `.env` com pelo menos `PORT` e `REDIS_URL` (veja exemplos em `DOCUMENTATION.md`).
+4. `npm start` e acesse `/api-docs` para testar.
 
-- **Retry Pattern:** Implementação automática de tentativas (via `async-retry`) caso o motor de renderização (Puppeteer) falhe temporariamente.
+## Endpoint principal
 
-- **Timeouts:** Proteção contra processos "zumbis" que consomem memória excessiva.
+- **POST** `/generate-pdf` – envia `templateName`, `data` e opcional `fileName`; resposta é `application/pdf` com `Content-Disposition` definido (usa `fileName` se enviado).
 
-### 4. Arquitetura de Alta Concorrência
+## Infra & observabilidade
 
-- **Idempotência via Hashing:** Utilizamos `fast-json-stable-stringify` para gerar hashes únicos baseados no payload da requisição.
+- Redis obrigatório para o lock. Puppeteer baixa Chromium automaticamente (ou configure `PUPPETEER_EXECUTABLE_PATH`).
+- Logs em JSON quando `NODE_ENV=production`; em dev também grava `logs/`.
 
-- **Distributed Locking (Redis):** Prevenção de processamento duplicado. Se duas requisições idênticas chegarem simultaneamente, o sistema identifica o hash no Redis e bloqueia/fila a segunda, economizando CPU.
+## Mais detalhes
 
----
-
-## Tecnologias
-
-- **Runtime:** Node.js & Express
-
-- **Core:** [Puppeteer](https://pptr.dev/) (Chrome Headless)
-
-- **Engine de Templates:** [Handlebars](https://handlebarsjs.com/)
-
-- **Cache & Lock:** [Redis](https://redis.io/)
-
-- **Documentação:** Swagger (OpenAPI)
-
----
-
-## Lógica de Processamento
-
-O fluxo de uma requisição segue os seguintes passos para garantir performance e integridade:
-
-1. **Recepção:** A API recebe o JSON com `templateName` e `data`.
-
-2. **Hashing:** O payload é convertido em um hash SHA-256 (ou similar) determinístico.
-
-3. **Verificação de Lock (Redis):**
-
-    - O sistema consulta se este hash já está sendo processado.
-
-    - **Se sim:** A requisição retorna um status de espera ou erro amigável (429 Too Many Requests), evitando desperdício de recursos.
-
-    - **Se não:** Uma chave é criada no Redis com TTL (tempo de vida).
-
-4. **Compilação:** O Handlebars mescla o JSON com o arquivo `.hbs` e os *partials* (Header/Footer).
-
-5. **Renderização:** O Puppeteer converte o HTML compilado em Buffer PDF.
-
-6. **Entrega:** O PDF é retornado ao cliente e a chave no Redis é liberada.
-
----
-
-## Exemplo de Payload (JSON)
-
-Para gerar um documento, envie uma requisição `POST` para `/generate-pdf`:
-
-```json
-
-{
-
-  "templateName": "relatorio",
-
-  "data": {
-
-    "titulo": "Relatório Anual de Vendas",
-
-    "cliente": {
-
-      "nome": "Empresa Solar Tech",
-
-      "email": "contato@solar.tech"
-
-    },
-
-    "itens": [
-
-      { "descricao": "Consultoria Técnica", "preco": "5.000,00" },
-
-      { "descricao": "Manutenção de Servidores", "preco": "2.500,00" }
-
-    ],
-
-    "total": "7.500,00"
-
-  }
-
-}
-
-```
-
-## Variáveis de Ambiente
-
-Crie um arquivo `.env` na raiz do projeto para configurar o comportamento:
-
-```env
-
-# Servidor
-
-PORT=3000
-
-
-
-# Redis (Controle de Concorrência)
-
-REDIS_HOST=localhost
-
-REDIS_PORT=6379
-
-
-
-# Resiliência
-
-MAX_RETRIES=3
-
-PUPPETEER_TIMEOUT=30000
-
-```
-
-## Como Rodar
-
-### Pré-requisitos
-
-- [Node.js](https://nodejs.org/) (v18 ou superior)
-
-- [Redis](https://redis.io/) (Local ou via Docker)
-
-### Passo a Passo
-
-1. **Clone o repositório e instale as dependências:**
-
-    ```bash
-
-    npm install
-
-    ```
-
-2. **Suba o Redis (Opcional - via Docker):**
-
-    ```bash
-
-    docker run --name redis-pdf -p 6379:6379 -d redis
-
-    ```
-
-3. **Inicie o Microserviço:**
-
-    ```bash
-
-    npm start
-
-    ```
-
-4. **Acesse a Documentação Interativa:**
-
-    Abra seu navegador em: `http://localhost:3000/api-docs`
-
-## Estrutura do Projeto
-
-```text
-
-/pdf-service
-
-  ├── src
-
-  │   ├── partials       # Componentes reutilizáveis (Header, Footer)
-
-  │   └── templates      # Modelos de documentos (Relatórios, Certificados)
-
-  ├── controller.js      # Lógica de negócio (Puppeteer, Handlebars, Redis)
-
-  ├── index.js           # Entry point e Rotas Express
-
-  ├── swagger.yaml       # Definição da API
-
-  └── package.json       # Dependências e Scripts
-
-```
+Consulte `DOCUMENTATION.md` para payloads completos, propriedades dos componentes/templates, variáveis de ambiente e exemplos adicionais.
 
 ## Autores
 
 - **Gabriel Alves** - [GitHub](https://github.com/GabrielAlves-Dev)
-
 - **Juan Pimentel** - [GitHub](https://github.com/JuandbPimentel)
