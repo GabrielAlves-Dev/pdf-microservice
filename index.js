@@ -35,6 +35,11 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/api-docs.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerDocument);
+});
+
 app.post("/generate-pdf", controller.generatePdf);
 
 const PORT = process.env.PORT ?? 3000;
