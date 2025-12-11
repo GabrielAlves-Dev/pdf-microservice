@@ -9,6 +9,18 @@ app.use(express.json());
 
 try {
   const swaggerDocument = YAML.load("./swagger.yaml");
+  if (process.env.PUBLIC_API_URL){
+    swaggerDocument.servers = [
+      {
+        url: process.env.PUBLIC_URL_API,
+        description: "Servidor de Produção (Render)"
+      }
+    ];
+    const urlObj = new URL(process.env.PUBLIC_URL_API);
+    swaggerDocument.host = urlObj.host;
+    swaggerDocument.schemes = [urlObj.protocol.replace(":","")];
+  }
+  
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 } catch (e) {
   console.log("Swagger não configurado ou arquivo não encontrado.");
