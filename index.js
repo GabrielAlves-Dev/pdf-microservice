@@ -3,6 +3,8 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const controller = require("./src/controller");
+const cors = require('cors');
+const swaggerDocument = YAML.load("./swagger.yaml");
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
@@ -26,8 +28,7 @@ app.use(cors(corsOptions));
 app.use(express.static("public")); // Serve arquivos estáticos do frontend
 
 try {
-  const swaggerDocument = YAML.load("./swagger.yaml");
-
+  
   const serverUrl = process.env.PUBLIC_API_URL;
 
   if (serverUrl) {
