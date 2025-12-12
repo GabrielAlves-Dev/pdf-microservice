@@ -4,8 +4,8 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const controller = require("./src/controller");
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',') 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
   : [];
 
 const corsOptions = {
@@ -13,42 +13,43 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Acesso bloqueado por CORS policy'));
+      callback(new Error("Acesso bloqueado por CORS policy"));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 const app = express();
 app.use(express.json());
 app.use(cors(corsOptions));
+app.use(express.static("public")); // Serve arquivos estáticos do frontend
 
 try {
   const swaggerDocument = YAML.load("./swagger.yaml");
-  
+
   const serverUrl = process.env.PUBLIC_API_URL;
 
-  if (serverUrl){
+  if (serverUrl) {
     swaggerDocument.servers = [
       {
         url: serverUrl,
-        description: "Servidor de Produção (Render)"
-      }
+        description: "Servidor de Produção (Render)",
+      },
     ];
-    console.log(`Swagger configurado para: ${serverUrl}`)
+    console.log(`Swagger configurado para: ${serverUrl}`);
   }
-   
+
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 } catch (e) {
   console.log("Swagger não configurado ou arquivo não encontrado.", e.message);
 }
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ 
-    status: "ok", 
+  res.status(200).json({
+    status: "ok",
     uptime: process.uptime(),
-    timestamp: new Date() 
+    timestamp: new Date(),
   });
 });
 
