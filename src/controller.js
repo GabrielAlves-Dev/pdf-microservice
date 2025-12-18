@@ -8,50 +8,7 @@ const { compileTemplate } = require("./libs/templateEngine");
 const { preProcessData } = require("./libs/dataProcessor");
 const { generatePdfWithRetry } = require("./libs/pdfGenerator");
 
-function extractImageUrls(html) {
-  const imageUrls = [];
-  const srcRegex = /src=["']([^"']+)["']/gi;
-  let match;
-
-  while ((match = srcRegex.exec(html)) !== null) {
-    const url = match[1];
-    if (url.includes("/uploads/")) {
-      imageUrls.push(url);
-    }
-  }
-
-  return imageUrls;
-}
-
-function cleanupImages(imageUrls, requestId) {
-  imageUrls.forEach((url) => {
-    try {
-      const urlObj = new URL(url, "http://localhost");
-      const pathname = urlObj.pathname;
-      const filePath = path.join(__dirname, "../public", pathname);
-
-      if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-          if (err) {
-            logger.warn(`[${requestId}] Falha ao deletar imagem temporária`, {
-              filePath,
-              error: err.message,
-            });
-          } else {
-            logger.debug(`[${requestId}] Imagem temporária deletada`, {
-              filePath,
-            });
-          }
-        });
-      }
-    } catch (error) {
-      logger.warn(`[${requestId}] Erro ao processar URL de imagem`, {
-        url,
-        error: error.message,
-      });
-    }
-  });
-}
+// Removidas funções de extração/limpeza de imagens de uploads, pois imagens agora devem ser embutidas no payload (data URIs) e nenhuma limpeza de arquivos temporários é necessária.
 
 module.exports = {
   generatePdf: async (req, res) => {
@@ -95,13 +52,7 @@ module.exports = {
       const html = await compileTemplate(templateName, processedData);
       const pdfBuffer = await generatePdfWithRetry(html);
 
-      const imageUrlsUsed = extractImageUrls(html);
-      if (imageUrlsUsed.length > 0) {
-        logger.info(
-          `[${requestId}] Limpando ${imageUrlsUsed.length} imagem(ns) temporária(s)`
-        );
-        cleanupImages(imageUrlsUsed, requestId);
-      }
+      // Imagens devem ser embutidas no payload (data URIs) e não requerem limpeza de arquivos temporários.
 
       const finalFileName = fileName
         ? fileName.replace(/[^a-z0-9]/gi, "_").toLowerCase() + ".pdf"

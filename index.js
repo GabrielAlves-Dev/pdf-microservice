@@ -82,8 +82,9 @@ if (allowAllOrigins) {
 }
 
 const app = express();
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ limit: "20mb", extended: true }));
+const JSON_LIMIT = process.env.JSON_LIMIT || "50mb";
+app.use(express.json({ limit: JSON_LIMIT }));
+app.use(express.urlencoded({ limit: JSON_LIMIT, extended: true }));
 app.use(cors(corsOptions));
 app.use(express.static("public"));
 
@@ -140,33 +141,9 @@ app.get("/debug/origin", (req, res) => {
   });
 });
 
-const fs = require("fs");
-const path = require("path");
-const multer = require("multer");
-
-const uploadsDir = path.join(__dirname, "public", "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, name);
-  },
-});
-
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
-
-app.post("/upload-image", upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file" });
-  const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${
-    req.file.filename
-  }`;
-  res.json({ url: publicUrl });
-});
+// Upload de imagens via endpoint removido.
+// Agora as imagens devem ser passadas embutidas no payload (campo `conteudo` de seções do tipo `foto`), preferencialmente como data URI (ex.: `data:image/png;base64,...`).
+// Isso evita armazenamento temporário no servidor e simplifica o fluxo.
 
 const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => {

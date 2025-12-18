@@ -4,26 +4,79 @@ info:
   description: |
     Serviço HTTP para gerar PDFs a partir de templates Handlebars. 
     Recebe JSON, compila HTML, renderiza com Puppeteer e devolve o PDF.
-    
+
     **Principais Recursos:**
     - **Templates**: Arquivos `.hbs` pré-definidos ou modo `builder` para construção livre.
+    - **Imagens**: Suporte a imagens embutidas em data URIs (`data:image/...;base64,...`) ou URLs externas.
     - **Idempotência**: Lock distribuído via Redis (TTL 30s) baseado no hash do payload.
     - **Resiliência**: Retry automático (default 3x) em caso de falhas de renderização.
   version: 1.0.0
 
-# A URL do servidor será injetada dinamicamente pelo index.js se a env PUBLIC_API_URL existir.
-# Caso contrário, usa o localhost.
 servers:
   - url: http://localhost:3000
     description: Servidor Local
 
 paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Verifica se o serviço está ativo e retorna informações de uptime.
+      tags:
+        - Monitoramento
+      responses:
+        "200":
+          description: Serviço operacional
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  uptime:
+                    type: number
+                    description: Tempo de atividade em segundos
+                    example: 3600.5
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-12-17T15:30:00.000Z"
+
+  /debug/origin:
+    get:
+      summary: Debug de CORS
+      description: Endpoint de debug para inspecionar headers e origem da requisição.
+      tags:
+        - Debug
+      responses:
+        "200":
+          description: Informações da requisição
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  origin:
+                    type: string
+                    nullable: true
+                  headers:
+                    type: object
+                  method:
+                    type: string
+                  path:
+                    type: string
+
   /generate-pdf:
     post:
       summary: Gerar PDF
       description: |
         Recebe o nome do template e os dados (data), compila e retorna um binário PDF.
         Implementa verificação de duplicidade via Redis (retorna 429 se processando o mesmo payload).
+
+        **Usando imagens embutidas (base64 / data URI):**
+        - Inclua imagens diretamente no payload no campo `conteudo` de uma seção do tipo `foto`, como uma data URI (ex.: `data:image/png;base64,...`).
+        - Isso evita armazenamento temporário no servidor e simplifica o fluxo.
       tags:
         - Geração de Documentos
       requestBody:
@@ -31,10 +84,136 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PdfRequest'
+              $ref: "#/components/schemas/PdfRequest"
             examples:
-              1_Builder_Generico:
-                summary: 1. Modo Builder (Livre)
+              1_Builder_Com_Imagem:
+                description: Exemplo de documento grande (cole o base64 manualmente no campo `logoUrl`)
+                value:
+                  templateName: "builder"
+                  fileName: "DocumentoTeste"
+                  data:
+                    secoes:
+                      - componente: "header_corporativo"
+                        margemInferior: 20
+                        empresaNome: "NEXUS TECNOLOGIA GLOBAL"
+                        documentoTitulo: "RELATÓRIO ANUAL DE PERFORMANCE 2024"
+                        referencia: "REL-2024-FINAL"
+                        dataAtual: "08/12/2025"
+                        logoUrl: "data:image/png;base64,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"
+
+                      - componente: "info_grid"
+                        margemInferior: 30
+                        tituloSecao: "Resumo do Projeto"
+                        itens:
+                          - label: "Cliente"
+                            valor: "Grupo Financeiro Alpha"
+                          - label: "Gerente Responsável"
+                            valor: "Carlos Mendes"
+                          - label: "Status"
+                            valor: "Concluído"
+                          - label: "Budget Total"
+                            valor: "R$ 1.500.000,00"
+
+                      - componente: "texto"
+                        margemInferior: 20
+                        titulo: "1. Visão Geral"
+                        conteudo: "O ano fiscal de 2024 representou um marco histórico para a operação. Atingimos <b>125% da meta</b> estipulada no Q1, com destaque para a redução de custos operacionais (OpEx) e aumento da eficiência energética dos servidores."
+                        alinhamento: "justify"
+                        tamanhoFonte: 12
+
+                      - componente: "grafico"
+                        titulo: "Evolução da Receita Trimestral (em Milhões)"
+                        config:
+                          type: "bar"
+                          data:
+                            labels: ["Q1", "Q2", "Q3", "Q4"]
+                            datasets:
+                              - label: "Receita 2024"
+                                data: [3.5, 4.2, 5.8, 6.1]
+                                backgroundColor: "rgba(54, 162, 235, 0.7)"
+                                borderColor: "rgba(54, 162, 235, 1)"
+                                borderWidth: 1
+                              - label: "Meta"
+                                type: "line"
+                                data: [3.0, 4.0, 5.0, 5.5]
+                                borderColor: "#ff6384"
+                                borderWidth: 2
+                                fill: false
+                                tension: 0.4
+                        descricao: "O gráfico combina barras (realizado) com linha (meta), demonstrando superação consistente."
+
+                      - componente: "texto"
+                        titulo: "2. Detalhamento Técnico"
+                        conteudo: "Abaixo apresentamos a distribuição dos incidentes técnicos resolvidos por categoria. Note que a categoria 'Infraestrutura' teve a maior queda após a migração para a nuvem."
+                        margemInferior: 10
+
+                      - componente: "grafico"
+                        titulo: "Distribuição de Incidentes (Doughnut Chart)"
+                        config:
+                          type: "doughnut"
+                          data:
+                            labels:
+                              ["Software", "Hardware", "Rede", "Segurança"]
+                            datasets:
+                              - data: [45, 15, 25, 15]
+                                backgroundColor:
+                                  ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"]
+                                hoverOffset: 4
+
+                      - componente: "tabela"
+                        margemInferior: 20
+                        titulo: "Top 5 Despesas Operacionais"
+                        colunas:
+                          - "Centro de Custo"
+                          - "Responsável"
+                          - "Valor (R$)"
+                          - "% do Total"
+                        linhas:
+                          - [
+                              "Licenças de Software",
+                              "TI Corporativa",
+                              "250.000",
+                              "35%",
+                            ]
+                          - [
+                              "Servidores Cloud (AWS)",
+                              "Infraestrutura",
+                              "180.000",
+                              "25%",
+                            ]
+                          - ["Consultoria Externa", "RH", "90.000", "12%"]
+                          - ["Marketing Digital", "Marketing", "85.000", "11%"]
+                          - ["Logística", "Operações", "50.000", "7%"]
+
+                      - componente: "lista"
+                        margemInferior: 20
+                        titulo: "Próximos Passos (Q1 2025)"
+                        ordenada: false
+                        itens:
+                          - "Iniciar migração do banco de dados legado para PostgreSQL."
+                          - "Implementar autenticação via MFA para todos os colaboradores."
+                          - "Renegociar contratos com fornecedores de hardware."
+                          - "Expandir equipe de desenvolvimento (5 novas vagas)."
+
+                      - componente: "qrcode"
+                        titulo: "Autenticidade Digital"
+                        conteudo: "https://nexus-global.com/validar-doc?hash=abc-123-xyz"
+                        legenda: "Aponte a câmera do celular para validar este documento na Blockchain."
+                        alinhamento: "center"
+
+                      - componente: "assinaturas"
+                        margemInferior: 0
+                        assinantes:
+                          - nome: "Gabriel Alves"
+                            cargo: "Chief Technology Officer"
+                          - nome: "Juan Pimentel"
+                            cargo: "Diretor de Operações"
+                          - nome: "Auditores Independentes"
+                            cargo: "Validação Externa"
+                            documento: "CRC 12345/O"
+
+              2_Builder_Generico:
+                summary: 2.  Modo Builder (Livre)
                 description: Cria um PDF compondo seções (texto, tabela, gráfico, QR code) dinamicamente.
                 value:
                   templateName: "builder"
@@ -47,7 +226,7 @@ paths:
                       margemDireita: 20
                     secoes:
                       - componente: "texto"
-                        conteudo: "<h1>Relatório Dinâmico</h1><p>Gerado via API Builder.</p>"
+                        conteudo: "<h1>Relatório Dinâmico</h1><p>Gerado via API Builder. </p>"
                         alinhamento: "center"
                       - componente: "grafico"
                         config:
@@ -61,9 +240,12 @@ paths:
                       - componente: "qrcode"
                         conteudo: "https://github.com/gabrielalves-dev"
                         titulo: "Escaneie para acessar"
-              
-              2_Certificado:
-                summary: 2. Template Certificado
+                        alinhamento: "center"
+                        largura: "50%"
+                        legenda: "Logotipo oficial"
+
+              3_Certificado:
+                summary: 3. Template Certificado
                 description: Template paisagem com borda dupla e tipografia clássica.
                 value:
                   templateName: "certificado"
@@ -79,8 +261,8 @@ paths:
                       - nome: "Universidade Federal"
                         cargo: "Diretoria Acadêmica"
 
-              3_Contrato:
-                summary: 3. Template Contrato
+              4_Contrato:
+                summary: 4. Template Contrato
                 description: Contrato formal com cabeçalho corporativo e cláusulas legais.
                 value:
                   templateName: "contrato"
@@ -88,7 +270,7 @@ paths:
                   data:
                     empresaNome: "Tech Solutions LTDA"
                     documentoTitulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS"
-                    referencia: "REF: 2025/001"
+                    referencia: "REF:  2025/001"
                     dadosCliente:
                       - label: "CONTRATANTE"
                         valor: "Empresa Cliente S.A."
@@ -96,16 +278,16 @@ paths:
                         valor: "00.000.000/0001-91"
                     servicoDescricao: "Desenvolvimento de API RESTful com integração Redis."
                     valorTotal: "R$ 15.000,00"
-                    textoLegal: "<p>Cláusula 1ª: O objeto do presente contrato é...</p><p>Cláusula 2ª: O pagamento será efetuado...</p>"
+                    textoLegal: "<p>Cláusula 1ª:  O objeto do presente contrato é... </p><p>Cláusula 2ª: O pagamento será efetuado... </p>"
                     listaAssinantes:
                       - nome: "Representante Tech"
                         cargo: "Diretor"
-                        documento: "CPF: 123.456.789-00"
+                        documento: "CPF:  123.456.789-00"
                       - nome: "Cliente S.A."
                         cargo: "Gerente de Projetos"
 
-              4_Relatorio:
-                summary: 4. Template Relatório
+              5_Relatorio:
+                summary: 5. Template Relatório
                 description: Relatório financeiro com tabela de lançamentos e totais.
                 value:
                   templateName: "relatorio"
@@ -128,8 +310,8 @@ paths:
                     statusTexto: "PAGO"
                     corStatus: "#28a745"
 
-              5_Nota_Fiscal:
-                summary: 5. Template Nota Fiscal
+              6_Nota_Fiscal:
+                summary: 6. Template Nota Fiscal
                 description: Layout de NF simples (não fiscal oficial) com QR Code Pix.
                 value:
                   templateName: "nota_fiscal"
@@ -139,7 +321,7 @@ paths:
                       - label: "Razão Social"
                         valor: "Minha Loja LTDA"
                       - label: "CNPJ"
-                        valor: "12.345.678/0001-90"
+                        valor: "12. 345.678/0001-90"
                     destinatario:
                       - label: "Nome"
                         valor: "Maria Souza"
@@ -162,7 +344,7 @@ paths:
                     observacoes: "Garantia de 12 meses."
 
       responses:
-        '200':
+        "200":
           description: PDF gerado com sucesso
           content:
             application/pdf:
@@ -173,20 +355,20 @@ paths:
             Content-Disposition:
               schema:
                 type: string
-                example: attachment; filename="documento.pdf"
-        '400':
+                example: attachment; filename="documento. pdf"
+        "400":
           description: Erro de Validação (Faltando templateName ou data)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: Template não encontrado
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '429':
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
           description: Conflito/Lock (Requisição duplicada em processamento)
           content:
             application/json:
@@ -195,11 +377,11 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Esta requisição já está sendo processada. Aguarde."
+                    example: "Esta requisição já está sendo processada.  Aguarde."
                   retryAfter:
                     type: integer
                     example: 5
-        '500':
+        "500":
           description: Erro Interno (Falha no Puppeteer ou Redis após retries)
           content:
             application/json:
@@ -230,7 +412,7 @@ components:
         data:
           type: object
           description: Objeto de dados variáveis. A estrutura depende do templateName escolhido (ver exemplos).
-    
+
     ErrorResponse:
       type: object
       properties:

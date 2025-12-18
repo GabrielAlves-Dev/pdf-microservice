@@ -30,6 +30,28 @@ async function preProcessData(data) {
       chaves: Object.keys(secao),
     });
 
+    // Normalizar imagens embutidas (data URI) para componente 'foto' quando aplicável
+    if (secao.componente && secao.componente.toLowerCase() === "foto") {
+      if (secao.conteudo) {
+        const c = String(secao.conteudo).trim();
+        if (!/^data:/.test(c) && !/^https?:\/\//.test(c)) {
+          const base = c.replace(/\s+/g, "");
+          if (/^[A-Za-z0-9+/=]+$/.test(base) && base.length > 100) {
+            secao.conteudo = `data:image/png;base64,${base}`;
+            logger.info(
+              `[SUCESSO] Conteúdo da foto normalizado para dataURI na seção #${index}`
+            );
+          } else {
+            logger.warn(
+              `[AVISO] Seção #${index} (foto) tem conteúdo não reconhecido; envie como data URI ou URL`
+            );
+          }
+        }
+      } else {
+        logger.warn(`[ALERTA] Seção #${index} é foto mas não tem 'conteudo'`);
+      }
+    }
+
     if (secao.componente && secao.componente.toLowerCase() === "qrcode") {
       if (!secao.conteudo) {
         logger.warn(
