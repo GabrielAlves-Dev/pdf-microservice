@@ -11,8 +11,8 @@ const allowedOrigins = rawAllowed
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean)
-  .map((o) => o.replace(/\/$/, "")); // remove trailing slash
-// Normalize origins to ensure exact matches, adding scheme if missing
+  .map((o) => o.replace(/\/$/, ""));
+
 const normalizeOrigin = (o) => {
   try {
     if (!/^https?:\/\//i.test(o)) return new URL("https://" + o).origin;
@@ -21,11 +21,10 @@ const normalizeOrigin = (o) => {
     return o;
   }
 };
-// When no scheme is present, add both https and http variants for flexibility
+
 const allowedOriginsSet = new Set(
   allowedOrigins.flatMap((orig) => {
     if (!/^https?:\/\//i.test(orig)) {
-      // add both https and http
       return [
         normalizeOrigin(`https://${orig}`),
         normalizeOrigin(`http://${orig}`),
@@ -34,6 +33,7 @@ const allowedOriginsSet = new Set(
     return [normalizeOrigin(orig)];
   })
 );
+
 const allowAllOrigins =
   rawAllowed.trim() === "*" || allowedOrigins.length === 0;
 
@@ -55,12 +55,11 @@ if (allowAllOrigins) {
       return undefined;
     }
   })();
-  console.log("CORS: Allowed origins:", Array.from(allowedOriginsSet));
+  console.log("CORS:  Allowed origins:", Array.from(allowedOriginsSet));
   if (publicOrigin) console.log("CORS: PUBLIC_API_URL origin:", publicOrigin);
   corsOptions = {
     origin: function (origin, callback) {
       if (origin === undefined) {
-        // Non-browser clients (curl, server-side) won't set Origin; allow them
         callback(null, true);
         return;
       }
@@ -83,12 +82,12 @@ if (allowAllOrigins) {
 }
 
 const app = express();
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ limit: "20mb", extended: true }));
+const JSON_LIMIT = process.env.JSON_LIMIT || "50mb";
+app.use(express.json({ limit: JSON_LIMIT }));
+app.use(express.urlencoded({ limit: JSON_LIMIT, extended: true }));
 app.use(cors(corsOptions));
-app.use(express.static("public")); // Serve arquivos estáticos do frontend
+app.use(express.static("public"));
 
-// Debug middleware: logs request method, path and origin when DEBUG_CORS=1
 if (process.env.DEBUG_CORS === "1" || process.env.DEBUG_CORS === "true") {
   app.use((req, res, next) => {
     console.log(
@@ -133,7 +132,6 @@ app.get("/api-docs.json", (req, res) => {
 
 app.post("/generate-pdf", controller.generatePdf);
 
-// Debug endpoint to inspect headers and origin
 app.get("/debug/origin", (req, res) => {
   res.json({
     origin: req.headers.origin || null,
@@ -143,35 +141,9 @@ app.get("/debug/origin", (req, res) => {
   });
 });
 
-// Endpoint para upload de imagens (multipart/form-data)
-const fs = require("fs");
-const path = require("path");
-const multer = require("multer");
-
-// cria diretório de uploads se não existir
-const uploadsDir = path.join(__dirname, "public", "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, name);
-  },
-});
-
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
-
-app.post("/upload-image", upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file" });
-  const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${
-    req.file.filename
-  }`;
-  res.json({ url: publicUrl });
-});
+// Upload de imagens via endpoint removido.
+// Agora as imagens devem ser passadas embutidas no payload (campo `conteudo` de seções do tipo `foto`), preferencialmente como data URI (ex.: `data:image/png;base64,...`).
+// Isso evita armazenamento temporário no servidor e simplifica o fluxo.
 
 const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => {
